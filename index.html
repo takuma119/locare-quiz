@@ -1,187 +1,22 @@
 <!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BizTerm Master (Python)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
-    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #f3f4f6;
-      }
-      .loading-overlay {
-        position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: #f3f4f6;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
-        transition: opacity 0.5s;
-      }
-      /* Hide scrollbar for cleaner UI */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #f1f1f1; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #c7c7cc; 
-        border-radius: 4px;
-      }
-    </style>
-  <script type="importmap">
+<html>
+<head>
+    <title>BizTerm Master</title>
+<script type="importmap">
 {
   "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
   }
 }
 </script>
 </head>
-  <body>
-    <div id="loading" class="loading-overlay">
-      <div class="flex flex-col items-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <p class="text-indigo-600 font-semibold">Loading Python Engine...</p>
-      </div>
-    </div>
-
-    <!-- Start Screen -->
-    <div id="start-screen" class="flex flex-col items-center justify-center min-h-screen p-4 transition-opacity duration-300">
-      <div class="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center">
-        <div class="flex justify-center mb-6">
-          <div class="bg-indigo-100 p-4 rounded-full">
-            <!-- Icon: BookOpen -->
-            <svg class="w-12 h-12 text-indigo-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-          </div>
-        </div>
-        
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">BizTerm Master</h1>
-        <p class="text-gray-500 mb-8">
-          ビジネス用語・IT用語の理解度をテストしましょう。<br>
-          Pythonで再構築されたバージョンです。
-        </p>
-
-        <div class="mb-8 text-left bg-gray-50 p-6 rounded-xl border border-gray-100">
-          <label class="block text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-            <!-- Icon: Brain -->
-            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>
-            問題数を選択 (<span id="count-display">10</span>問)
-          </label>
-          <input
-            id="question-count-slider"
-            type="range"
-            min="5"
-            max="100"
-            step="1"
-            value="10"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-            oninput="document.getElementById('count-display').innerText = this.value"
-          />
-          <div class="flex justify-between text-xs text-gray-400 mt-2">
-            <span>5問</span>
-            <span>50問</span>
-            <span id="max-count-label">全問</span>
-          </div>
-        </div>
-
-        <button
-          py-click="start_game"
-          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-8 rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
-        >
-          <!-- Icon: Play -->
-          <svg class="w-5 h-5 fill-current" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          テストを開始する
-        </button>
-      </div>
-    </div>
-
-    <!-- Quiz Screen -->
-    <div id="quiz-screen" class="hidden min-h-screen flex flex-col items-center p-4 max-w-3xl mx-auto">
-      <!-- Progress Bar -->
-      <div class="w-full h-2 bg-gray-200 rounded-full mb-6 mt-4">
-        <div id="progress-bar" class="h-full bg-indigo-600 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
-      </div>
-
-      <div class="w-full flex justify-between items-center mb-6 text-sm font-medium text-gray-500">
-        <span id="question-number">Question 1 / 10</span>
-        <span id="question-category" class="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs">Category</span>
-      </div>
-
-      <!-- Card -->
-      <div class="bg-white rounded-2xl shadow-lg p-6 md:p-10 w-full mb-6 flex-grow flex flex-col justify-center">
-        <h2 id="question-text" class="text-xl md:text-2xl font-bold text-gray-800 leading-relaxed mb-8">
-          Question Meaning Here
-        </h2>
-
-        <div id="options-container" class="grid grid-cols-1 gap-3">
-          <!-- Buttons generated by Python -->
-        </div>
-      </div>
-
-      <!-- Next Button -->
-      <div class="h-20 w-full flex items-start justify-center">
-        <button
-          id="next-button"
-          py-click="next_question"
-          class="hidden bg-indigo-600 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-indigo-700 transition-transform transform hover:scale-105 flex items-center gap-2"
-        >
-          <span id="next-button-text">次の問題へ</span>
-          <!-- Icon: ArrowRight -->
-          <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Result Screen -->
-    <div id="result-screen" class="hidden min-h-screen bg-gray-50 p-4 md:p-8">
-      <div class="max-w-3xl mx-auto">
-        <div class="bg-white rounded-3xl shadow-xl overflow-hidden mb-8">
-          <div class="bg-indigo-600 p-8 text-center text-white">
-            <!-- Icon: Trophy -->
-            <svg class="w-16 h-16 mx-auto mb-4 text-yellow-300" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2h-4a4 4 0 0 0-4 4v3a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V6a4 4 0 0 0-4-4Z"/></svg>
-            
-            <h1 class="text-3xl font-bold mb-2">結果発表</h1>
-            <div class="text-6xl font-black mb-2 tracking-tighter">
-              <span id="result-percentage">100%</span>
-            </div>
-            <p id="result-score-text" class="text-indigo-200 text-lg">
-              10問中 10問正解
-            </p>
-            <p id="result-message" class="mt-4 font-bold text-xl">
-              完璧です！
-            </p>
-          </div>
-
-          <div class="p-6">
-            <button
-              py-click="restart_game"
-              class="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg"
-            >
-              <!-- Icon: RefreshCw -->
-              <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
-              もう一度挑戦する
-            </button>
-          </div>
-        </div>
-
-        <h3 class="text-xl font-bold text-gray-800 mb-4 px-2">振り返り</h3>
-        <div id="review-container" class="space-y-4">
-          <!-- Review items generated by Python -->
-        </div>
-        <div class="h-12"></div>
-      </div>
-    </div>
-
-    <!-- Main Logic -->
-    <script type="py" src="./main.py"></script>
-  </body>
+<body>
+    <h1>Application Updated</h1>
+    <p>This application has been migrated to Streamlit.</p>
+    <p>Please run the following command in your terminal:</p>
+    <code>streamlit run main.py</code>
+</body>
 </html>

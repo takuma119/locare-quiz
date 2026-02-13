@@ -1,8 +1,11 @@
+import streamlit as st
 import random
-from js import document, console, window
-from pyodide.ffi import create_proxy
+import time
 
-# Vocabulary List
+# -----------------------------------------------------------------------------
+# Data Definition
+# -----------------------------------------------------------------------------
+
 VOCABULARY_LIST = [
   { "term": "スコープ", "meaning": "範囲、対象領域。「それは今回のプロジェクトのスコープ外です（対象外なのでやりません）」", "category": "ビジネス基礎" },
   { "term": "カンバン", "meaning": "タスクを「未着手」「進行中」「完了」などのボードに貼り付けて管理する手法。トヨタ生産方式が発祥", "category": "ビジネス基礎" },
@@ -160,222 +163,276 @@ VOCABULARY_LIST = [
   { "term": "KGI", "meaning": "重要目標達成指標。KPIの親にあたる指標で、企業やプロジェクトの最終的なゴール（売上高、利益など）のこと", "category": "経営・戦略" }
 ]
 
-# Global State
-questions = []
-current_index = 0
-records = []
-selected_option = None
-is_answered = False
+# -----------------------------------------------------------------------------
+# Configuration & Styling
+# -----------------------------------------------------------------------------
 
-def get_el(id):
-    return document.getElementById(id)
+st.set_page_config(
+    page_title="BizTerm Master",
+    page_icon="🏆",
+    layout="centered"
+)
 
-def show_screen(screen_id):
-    get_el("start-screen").classList.add("hidden")
-    get_el("quiz-screen").classList.add("hidden")
-    get_el("result-screen").classList.add("hidden")
-    
-    el = get_el(screen_id)
-    el.classList.remove("hidden")
-    # Reset opacity animation helper
-    el.style.opacity = "0"
-    window.setTimeout(create_proxy(lambda: el.style.setProperty("opacity", "1")), 50)
+# Custom CSS to match the previous design feel
+st.markdown("""
+<style>
+    .stButton > button {
+        width: 100%;
+        border-radius: 12px;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        background-color: #f3f4f6;
+        color: #1f2937;
+        border: 1px solid #e5e7eb;
+        transition: all 0.2s;
+    }
+    .stButton > button:hover {
+        background-color: #e0e7ff;
+        border-color: #c7d2fe;
+        color: #4338ca;
+    }
+    .stProgress > div > div > div > div {
+        background-color: #4f46e5;
+    }
+    .category-tag {
+        background-color: #e0e7ff;
+        color: #4338ca;
+        padding: 0.2rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-bottom: 0.5rem;
+    }
+    .card-container {
+        background-color: white;
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        margin-bottom: 2rem;
+    }
+    .result-correct {
+        border-left: 4px solid #22c55e;
+        background-color: #f0fdf4;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .result-wrong {
+        border-left: 4px solid #ef4444;
+        background-color: #fef2f2;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-def start_game(event):
-    global questions, current_index, records
-    try:
-        count = int(get_el("question-count-slider").value)
-    except:
-        count = 10
-        
-    # Logic to generate quiz
+# -----------------------------------------------------------------------------
+# State Management
+# -----------------------------------------------------------------------------
+
+if 'game_state' not in st.session_state:
+    st.session_state.game_state = 'MENU' # MENU, PLAYING, FEEDBACK, RESULT
+if 'questions' not in st.session_state:
+    st.session_state.questions = []
+if 'current_index' not in st.session_state:
+    st.session_state.current_index = 0
+if 'results' not in st.session_state:
+    st.session_state.results = []
+if 'last_selected_option' not in st.session_state:
+    st.session_state.last_selected_option = None
+if 'last_is_correct' not in st.session_state:
+    st.session_state.last_is_correct = False
+
+# -----------------------------------------------------------------------------
+# Helper Functions
+# -----------------------------------------------------------------------------
+
+def start_game(num_questions):
     pool = VOCABULARY_LIST.copy()
     random.shuffle(pool)
-    selected_items = pool[:count]
+    selected_items = pool[:num_questions]
     
-    questions = []
+    generated_questions = []
     for item in selected_items:
         others = [t["term"] for t in VOCABULARY_LIST if t["term"] != item["term"]]
         distractors = random.sample(others, 3)
         options = distractors + [item["term"]]
         random.shuffle(options)
         
-        questions.append({
+        generated_questions.append({
             "term": item["term"],
             "meaning": item["meaning"],
             "category": item["category"],
             "options": options
         })
-        
-    current_index = 0
-    records = []
     
-    show_screen("quiz-screen")
-    render_question()
+    st.session_state.questions = generated_questions
+    st.session_state.current_index = 0
+    st.session_state.results = []
+    st.session_state.game_state = 'PLAYING'
 
-def render_question():
-    global is_answered, selected_option
-    is_answered = False
-    selected_option = None
+def check_answer(selected_option):
+    current_q = st.session_state.questions[st.session_state.current_index]
+    is_correct = (selected_option == current_q['term'])
     
-    q = questions[current_index]
-    total = len(questions)
-    
-    # Update UI
-    get_el("progress-bar").style.width = f"{(current_index / total) * 100}%"
-    get_el("question-number").innerText = f"Question {current_index + 1} / {total}"
-    get_el("question-category").innerText = q["category"]
-    get_el("question-text").innerText = q["meaning"]
-    
-    # Hide next button
-    get_el("next-button").classList.add("hidden")
-    
-    # Clear and render options
-    container = get_el("options-container")
-    container.innerHTML = ""
-    
-    for opt in q["options"]:
-        btn = document.createElement("button")
-        btn.className = "w-full p-4 rounded-xl text-left border-2 border-gray-100 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-200 flex justify-between items-center"
-        btn.innerText = opt
-        btn.setAttribute("data-option", opt)
-        
-        # Attach click event
-        btn.addEventListener("click", create_proxy(on_option_click))
-        container.appendChild(btn)
-
-def on_option_click(event):
-    global is_answered, selected_option, records
-    if is_answered:
-        return
-        
-    target = event.currentTarget
-    selected = target.getAttribute("data-option")
-    selected_option = selected
-    is_answered = True
-    
-    q = questions[current_index]
-    is_correct = (selected == q["term"])
-    
-    records.append({
-        "question": q,
-        "selected": selected,
+    st.session_state.results.append({
+        "question": current_q,
+        "selected": selected_option,
         "is_correct": is_correct
     })
     
-    # Update Styles
-    container = get_el("options-container")
-    for btn in container.children:
-        opt = btn.getAttribute("data-option")
-        btn.disabled = True
-        
-        # Reset base classes
-        btn.className = "w-full p-4 rounded-xl text-left border-2 transition-all duration-200 flex justify-between items-center"
-        
-        if opt == q["term"]:
-            # Correct answer
-            btn.classList.add("border-green-500", "bg-green-50", "text-green-700", "font-semibold")
-            # Add check icon
-            icon = document.createElement("div")
-            icon.innerHTML = '<svg class="w-5 h-5 text-green-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
-            btn.appendChild(icon)
-        elif opt == selected and not is_correct:
-            # Incorrect selection
-            btn.classList.add("border-red-500", "bg-red-50", "text-red-700")
-            # Add X icon
-            icon = document.createElement("div")
-            icon.innerHTML = '<svg class="w-5 h-5 text-red-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'
-            btn.appendChild(icon)
-        else:
-            # Others
-            btn.classList.add("border-gray-100", "text-gray-400", "opacity-50")
+    st.session_state.last_selected_option = selected_option
+    st.session_state.last_is_correct = is_correct
+    st.session_state.game_state = 'FEEDBACK'
 
-    # Show Next Button
-    btn_text = "結果を見る" if current_index == len(questions) - 1 else "次の問題へ"
-    get_el("next-button-text").innerText = btn_text
-    get_el("next-button").classList.remove("hidden")
-
-def next_question(event):
-    global current_index
-    if current_index < len(questions) - 1:
-        current_index += 1
-        render_question()
+def next_question():
+    if st.session_state.current_index < len(st.session_state.questions) - 1:
+        st.session_state.current_index += 1
+        st.session_state.game_state = 'PLAYING'
     else:
-        show_results()
+        st.session_state.game_state = 'RESULT'
 
-def show_results():
-    show_screen("result-screen")
+def restart_game():
+    st.session_state.game_state = 'MENU'
+    st.session_state.questions = []
+    st.session_state.results = []
+
+# -----------------------------------------------------------------------------
+# UI Renderers
+# -----------------------------------------------------------------------------
+
+def show_start_screen():
+    st.markdown("<div style='text-align: center; padding: 2rem;'>", unsafe_allow_html=True)
+    st.title("BizTerm Master")
+    st.caption("ビジネス用語・IT用語の理解度をテストしましょう。")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    with st.container():
+        st.write("")
+        st.markdown("### 問題設定")
+        num_questions = st.slider("問題数を選択してください", min_value=5, max_value=len(VOCABULARY_LIST), value=10)
+        
+        st.write("")
+        if st.button("テストを開始する", type="primary", use_container_width=True):
+            start_game(num_questions)
+            st.rerun()
+
+def show_quiz_screen():
+    current_q = st.session_state.questions[st.session_state.current_index]
+    total = len(st.session_state.questions)
+    current = st.session_state.current_index + 1
+    progress = st.session_state.current_index / total
+
+    st.progress(progress)
     
-    correct_count = len([r for r in records if r["is_correct"]])
-    total = len(questions)
-    percentage = int((correct_count / total) * 100) if total > 0 else 0
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.markdown(f"**Question {current}** / {total}")
+    with col2:
+        st.markdown(f"<div style='text-align: right;'><span class='category-tag'>{current_q['category']}</span></div>", unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card-container">
+        <h3 style="margin-top:0;">{current_q['meaning']}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Options Grid
+    options = current_q['options']
     
-    get_el("result-percentage").innerText = f"{percentage}%"
-    get_el("result-score-text").innerText = f"{total}問中 {correct_count}問正解"
+    # We use columns to create a grid layout for buttons
+    # In Streamlit, buttons trigger a rerun. We use a callback or just standard flow.
+    for option in options:
+        if st.button(option, key=option, use_container_width=True):
+            check_answer(option)
+            st.rerun()
+
+def show_feedback_screen():
+    # Show the same question info but with result
+    current_q = st.session_state.questions[st.session_state.current_index]
+    selected = st.session_state.last_selected_option
+    is_correct = st.session_state.last_is_correct
+    
+    st.progress((st.session_state.current_index + 1) / len(st.session_state.questions))
+    
+    if is_correct:
+        st.success(f"正解！ ({current_q['term']})")
+    else:
+        st.error(f"不正解... 正解は「{current_q['term']}」でした。")
+        st.markdown(f"あなたの回答: **{selected}**")
+
+    st.markdown(f"""
+    <div class="card-container">
+        <div style="color: #6b7280; font-size: 0.9rem; margin-bottom: 0.5rem;">{current_q['category']}</div>
+        <h3 style="margin-top:0;">{current_q['meaning']}</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("次の問題へ" if st.session_state.current_index < len(st.session_state.questions) - 1 else "結果を見る", type="primary", use_container_width=True):
+        next_question()
+        st.rerun()
+
+def show_result_screen():
+    results = st.session_state.results
+    correct_count = len([r for r in results if r['is_correct']])
+    total = len(results)
+    percentage = int((correct_count / total) * 100)
+    
+    st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+    st.title("結果発表")
+    st.markdown(f"<h1 style='font-size: 4rem; margin: 0;'>{percentage}%</h1>", unsafe_allow_html=True)
+    st.write(f"{total}問中 {correct_count}問正解")
     
     msg = ""
-    if percentage == 100: msg = "完璧です！素晴らしい！"
-    elif percentage >= 80: msg = "すごい！高得点です！"
-    elif percentage >= 60: msg = "その調子！あと少しです。"
-    else: msg = "次はもっと頑張ろう！"
-    get_el("result-message").innerText = msg
+    if percentage == 100: msg = "完璧です！素晴らしい！ 🏆"
+    elif percentage >= 80: msg = "すごい！高得点です！ 🎉"
+    elif percentage >= 60: msg = "その調子！あと少しです。 👍"
+    else: msg = "次はもっと頑張ろう！ 💪"
+    st.markdown(f"### {msg}")
+    st.markdown("</div>", unsafe_allow_html=True)
     
-    # Render Review List
-    container = get_el("review-container")
-    container.innerHTML = ""
+    if st.button("もう一度挑戦する", type="primary", use_container_width=True):
+        restart_game()
+        st.rerun()
     
-    for i, r in enumerate(records):
-        q = r["question"]
-        is_correct = r["is_correct"]
+    st.divider()
+    st.subheader("振り返り")
+    
+    for i, r in enumerate(results):
+        q = r['question']
+        is_correct = r['is_correct']
+        css_class = "result-correct" if is_correct else "result-wrong"
+        icon = "✅" if is_correct else "❌"
         
-        div = document.createElement("div")
-        border_class = "border-green-500" if is_correct else "border-red-500"
-        
-        # Build inner HTML
-        html_content = f"""
-            <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 {border_class}">
-              <div class="flex items-start gap-3">
-                <div class="mt-1 flex-shrink-0">
-                  {'<svg class="w-6 h-6 text-green-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' if is_correct else '<svg class="w-6 h-6 text-red-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>'}
+        st.markdown(f"""
+        <div class="{css_class}">
+            <div style="font-size: 0.8rem; font-weight: bold; color: #6b7280;">Q.{i+1} {q['category']} {icon}</div>
+            <div style="font-weight: 500; margin: 0.5rem 0;">{q['meaning']}</div>
+            <div style="display: flex; gap: 1rem; font-size: 0.9rem;">
+                <div>
+                    <span style="color: #6b7280;">正解:</span>
+                    <span style="font-weight: bold; color: #15803d;">{q['term']}</span>
                 </div>
-                <div class="flex-grow">
-                  <div class="flex justify-between items-start mb-2">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      Q.{i + 1} {q['category']}
-                    </span>
-                  </div>
-                  <p class="text-gray-800 font-medium mb-3">
-                    {q['meaning']}
-                  </p>
-                  
-                  <div class="flex flex-col sm:flex-row gap-2 sm:gap-8 text-sm">
-                    <div class="flex flex-col">
-                      <span class="text-gray-400 text-xs">正解</span>
-                      <span class="font-bold text-green-700">{q['term']}</span>
-                    </div>
-                    {"" if is_correct else f'''
-                    <div class="flex flex-col">
-                      <span class="text-gray-400 text-xs">あなたの回答</span>
-                      <span class="font-bold text-red-600 line-through decoration-red-400 decoration-2">
-                        {r['selected']}
-                      </span>
-                    </div>
-                    '''}
-                  </div>
-                </div>
-              </div>
+                {'' if is_correct else f'<div><span style="color: #6b7280;">あなたの回答:</span> <span style="font-weight: bold; color: #b91c1c; text-decoration: line-through;">{r["selected"]}</span></div>'}
             </div>
-        """
-        div.innerHTML = html_content.strip()
-        container.appendChild(div.firstElementChild)
+        </div>
+        """, unsafe_allow_html=True)
 
-def restart_game(event):
-    get_el("question-count-slider").value = 10
-    get_el("count-display").innerText = "10"
-    show_screen("start-screen")
+# -----------------------------------------------------------------------------
+# Main Routing
+# -----------------------------------------------------------------------------
 
-# Initialization
-get_el("max-count-label").innerText = f"{len(VOCABULARY_LIST)}問 (全問)"
-get_el("question-count-slider").max = len(VOCABULARY_LIST)
-get_el("loading").style.display = "none"
+def main():
+    if st.session_state.game_state == 'MENU':
+        show_start_screen()
+    elif st.session_state.game_state == 'PLAYING':
+        show_quiz_screen()
+    elif st.session_state.game_state == 'FEEDBACK':
+        show_feedback_screen()
+    elif st.session_state.game_state == 'RESULT':
+        show_result_screen()
 
+if __name__ == "__main__":
+    main()
